@@ -3,12 +3,12 @@
  * File: main.c
  * Author: Anirudh
  * Pin Configuration
- *  PB0 and PB3 switch
+ * PB0 and PB3 switch
  */
 
 #include <avr/io.h>
 #include <avr/interrupt.h>
-//#F_CPU 9600000UL
+
 unsigned int ADCval = 0;
 unsigned int count=0;
 volatile int timer_overflow_count_pulse = 0;
@@ -52,25 +52,8 @@ int main(void)
     sei();
 	
     while (1) {
-		if (trigger==1) {
-			ADCSRA |= 0b01000000;
-			while (!(ADCSRA & (1 << ADIF)));
-			ADCSRA |= (1 << ADIF);
-			ADCval = ADCH;
-			if ((PINB & 0b00001000)==0){					//Pulse Mode
-				if (PINB & 0b00000010){
-				TCCR0B |= (1<<CS02);		// Pre-scale timer to 1/256th the clock rate
-				count =ADCval>>3;
-				timer_overflow_count_time = 0;
-			
-				}
-				else{
-					PORTB &= ~(1<<PB4);
-					TCCR0B=0x00;
-					trigger=0;
-				}
-			}
-			else if ((PINB & 0b00000001)==0){							//Time keeper mode
+		if (trigger==1) {	
+			if ((PINB & 0b00000001)==0){							//Time keeper mode
 				TCCR0B |= (1<<CS02);		// Pre-scale timer to 1/256th the clock rate
 				PORTB|=(1<<PB4);
 				count =ADCval>>2;
@@ -83,9 +66,20 @@ int main(void)
 			}
 			
 		}
-		else{
-			if(!(PINB & 0b10000)){
-				TCCR0B=0x00;
+		else {
+			if(((PINB & 0b00001000)==0) && (PINB & 0b00000010)){
+			ADCSRA |= 0b01000000;
+			while (!(ADCSRA & (1 << ADIF)));
+			ADCSRA |= (1 << ADIF);
+			ADCval = ADCH;
+			TCCR0B |= (1<<CS02);		// Pre-scale timer to 1/256th the clock rate
+			count =ADCval>>3;
+			timer_overflow_count_time = 0;
+			trigger = 0; 
+			}
+		else{	
+			//PORTB &= ~(1<<PB4);
+			TCCR0B=0x00;
 			}
 		}
 	}
