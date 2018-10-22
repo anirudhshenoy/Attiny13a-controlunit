@@ -9,7 +9,6 @@
 #include <avr/io.h>
 #include <avr/interrupt.h>
 
-unsigned int ADCval = 0;
 unsigned int count=0;
 volatile int timer_overflow_count_pulse = 0;
 volatile int timer_overflow_count_time = 0;
@@ -54,9 +53,13 @@ int main(void)
     while (1) {
 		if (trigger==1) {	
 			if ((PINB & 0b00000001)==0){							//Time keeper mode
+				ADCSRA |= 0b01000000;
+				while (!(ADCSRA & (1 << ADIF)));
+				ADCSRA |= (1 << ADIF);
+				count = ADCH;
 				TCCR0B |= (1<<CS02);								// Pre-scale timer to 1/256th the clock rate
 				PORTB|=(1<<PB4);									//Set O/P tohigh
-				count =ADCval>>2;									//Calculate pulse high time 
+				count =count>>2;									//Calculate pulse high time 
 				trigger=0;					
 				timer_overflow_count_pulse = 0;
 			}
@@ -71,9 +74,9 @@ int main(void)
 				ADCSRA |= 0b01000000;
 				while (!(ADCSRA & (1 << ADIF)));
 				ADCSRA |= (1 << ADIF);
-				ADCval = ADCH;
+				count = ADCH;
 				TCCR0B |= (1<<CS02);										// Pre-scale timer to 1/256th the clock rate
-				count =ADCval>>3;											//Calculate pulse duty cycle
+				count =count>>3;											//Calculate pulse duty cycle
 				timer_overflow_count_time = 0;
 				trigger = 0; 
 			}
