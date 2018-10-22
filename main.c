@@ -80,7 +80,7 @@ int main(void)
 				timer_overflow_count_time = 0;
 				trigger = 0; 
 			}
-			else if (PINB & 0b00000010){
+			else if (!(PINB & 0b00001000)){
 				TCCR0B=0x00;
 				PORTB &= ~(1<<PB4);
 			}
