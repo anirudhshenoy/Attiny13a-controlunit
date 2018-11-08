@@ -4,10 +4,12 @@
  * Author: Anirudh
  * Pin Configuration
  * PB0 and PB3 switch
- * Pulse mode: PB2 HIGH PB0 HIGH
- * Toggle Mode: PB2 LOW PB0 HIGH
- * Timer Mode: PB2 PULLED LOW PB0 LOW 
+ * Pulse mode: PB2 HIGH PB0 HIGH Mode 0
+ * Toggle Mode: PB2 LOW PB0 HIGH Mode 1
+ * Timer Mode: PB2 PULLED LOW PB0 LOW Mode 2
  * Fuses OK (E:FF, H:FF, L:7A)
+ * Before burning : Change ALL PB3 instances to PB2
+ * Check ADMUX
  */
 
 #include <avr/io.h>
@@ -16,6 +18,7 @@
 unsigned int count=0;
 volatile int timer_overflow_count = 0;
 volatile int time_keeper_count = 0;
+volatile int mode = 0;
 volatile unsigned char trigger=0;
 unsigned char toggle=0b0;
 
@@ -25,21 +28,22 @@ ISR(INT0_vect){
 }
 
 void clear_PB2 (void) {
-	PORTB &= ~(1<<DDB2);
-	DDRB &= ~(1<<DDB2);
+	DDRB &= ~(1<<DDB3);
+	PORTB |= (1<<DDB3);
+	
 }
 void set_PB2_OP (void) {
-	DDRB|= (1<<DDB2);
-	PORTB |= (1<<DDB2);
+	DDRB|= (1<<DDB3);
+	PORTB &= ~(1<<DDB3);
 }
-ISR(TIM0_OVF_vect) {																// interrupts = 0.027s
-	if ((PINB & 0b00001000)==0){													//Pulse Mode
-		if (++timer_overflow_count > count) {										
-			PORTB ^= (1<<DDB4);
-			timer_overflow_count = 0;
-		}
+ISR(TIM0_OVF_vect) {																
+	if (mode==1){											//Toggle Mode
+		if (++timer_overflow_count < count) PORTB |= (1 << DDB4);
+		else PORTB &= ~(1 << DDB4);											//Software PWM Algo
+		if (timer_overflow_count>256) timer_overflow_count=0;
+		
 	}
-	else if ((PINB & 0b00000001)==0){												//Time Mode
+	else if (mode==2){												//Time Mode
 		if(++timer_overflow_count > 17){											//0.464 secs
 			if (++time_keeper_count > count) {
 				PORTB &= ~(1<<DDB4);
@@ -49,10 +53,11 @@ ISR(TIM0_OVF_vect) {																// interrupts = 0.027s
 			timer_overflow_count=0;
 		}
 	}
-	else {																			//Toggle Mode
-		if (++timer_overflow_count < count) PORTB |= (1 << DDB4);
-		else PORTB &= ~(1 << DDB4);													//Software PWM Algo	
-		if (timer_overflow_count>256) timer_overflow_count=0;
+	else {
+		if (++timer_overflow_count > count) {									//Pulse Mode
+			PORTB ^= (1<<DDB4);
+			timer_overflow_count = 0;
+		}
 	}
 }
 
@@ -73,7 +78,10 @@ int main(void)
     sei();
     while (1) {
 		if (trigger==1) {
+			set_PB2_OP();
 			if ((PINB & 0b00000001)==0){							//Time keeper mode
+				clear_PB2();
+				mode=2;
 				ADCSRA |= 0b01000000;
 				while (!(ADCSRA & (1 << ADIF)));
 				ADCSRA |= (1 << ADIF);
@@ -85,18 +93,25 @@ int main(void)
 				trigger=0;
 				//OCR0A=234;				
 				TCCR0B |= (1<<CS02) | (1<<CS00);								// Pre-scale tim9er to 1/1024 the clock rate	
+				
+				
 			}
-			else if((PINB & 0b00001000)==0){						//Pulse Mode
-				PORTB|=(1<<DDB4);
-				//OCR0A=234;
-				trigger=0;
+			else {
+					clear_PB2();
+					if((PINB & 0b00001000)==0){						//Pulse Mode
+					mode =0;
+					PORTB|=(1<<DDB4);
+					//OCR0A=234;
+					trigger=0;
+				}
+					else {
+						mode=1;													// Toggle Mode
+						toggle^=0b1;
+						timer_overflow_count=0;								//Start Timer with no pre-scaler
+						//OCR0A=1;
+						trigger=0;
+				}	
 			}
-			else {													// Toggle Mode
-				toggle^=0b1;
-				timer_overflow_count=0;								//Start Timer with no pre-scaler
-				//OCR0A=1;
-				trigger=0;
-			}			
 		}
 		if(((PINB & 0b00001000)==0) && (PINB & 0b00000010)){		//Pulse Mode and I/P is high
 			ADCSRA |= 0b01000000;
